@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="每日健身">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<title>每日健身</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --text: #111827;
+    --muted: #6b7280;
+    --border: #e3e6ea;
+    --accent: #ea580c;
+    --accent-soft: #ffedd5;
+    --done: #16a34a;
+    --done-soft: #dcfce7;
+    --partial: #f59e0b;
+    --partial-soft: #fef3c7;
+    --danger: #dc2626;
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f14;
+      --surface: #151b23;
+      --surface-2: #1d2530;
+      --text: #e6edf3;
+      --muted: #8b98a5;
+      --border: #26303c;
+      --accent: #fb923c;
+      --accent-soft: #3a2314;
+      --done: #22c55e;
+      --done-soft: #0f2e1c;
+      --partial: #fbbf24;
+      --partial-soft: #3a2e0e;
+      --danger: #f87171;
+      --shadow: none;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    min-height: 100dvh;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .app {
+    max-width: 520px;
+    margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 96px);
+  }
+  .view[hidden] { display: none; }
+
+  /* ---------- Header ---------- */
+  .head { display: flex; align-items: center; gap: 16px; margin: 4px 0 20px; }
+  .head-text { flex: 1; min-width: 0; }
+  .eyebrow { color: var(--muted); font-size: 14px; }
+  h1 { font-size: 26px; margin: 2px 0 8px; letter-spacing: -.01em; }
+  h2 { font-size: 18px; margin: 28px 0 12px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-soft); color: var(--accent);
+    padding: 4px 10px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  }
+  .ring { width: 84px; height: 84px; position: relative; flex: none; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 9; }
+  .ring .track { stroke: var(--surface-2); }
+  .ring .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .35s ease; }
+  .ring.full .bar { stroke: var(--done); }
+  .ring-label {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Task cards ---------- */
+  .tasks { display: grid; gap: 10px; }
+  .task {
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    padding: 16px; min-height: 76px; text-align: left;
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: 16px;
+    box-shadow: var(--shadow);
+    transition: background .2s, border-color .2s, transform .08s;
+    user-select: none;
+  }
+  .task:active { transform: scale(.98); }
+  .check {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    border: 2px solid var(--border); display: grid; place-items: center;
+    transition: background .2s, border-color .2s;
+  }
+  .check svg { width: 18px; height: 18px; opacity: 0; transition: opacity .15s; }
+  .tbody { flex: 1; min-width: 0; }
+  .tname { display: block; font-weight: 600; font-size: 17px; overflow-wrap: anywhere; }
+  .tmeta { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .treps { flex: none; text-align: right; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; }
+  .treps small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-top: 4px; }
+  .task.done { background: var(--done-soft); border-color: var(--done); }
+  .task.done .check { background: var(--done); border-color: var(--done); }
+  .task.done .check svg { opacity: 1; }
+  .task.done .tname { text-decoration: line-through; text-decoration-thickness: 1.5px; color: var(--muted); }
+  .task.done .treps { color: var(--done); }
+  .task.compact { min-height: 60px; padding: 12px 14px; }
+  .task.compact .treps { font-size: 20px; }
+  .task:disabled { opacity: .5; cursor: default; }
+
+  .banner {
+    margin-top: 16px; padding: 16px; border-radius: 16px; text-align: center;
+    background: var(--done-soft); color: var(--done); font-weight: 700;
+    animation: pop .4s ease;
+  }
+  @keyframes pop { 0% { transform: scale(.9); opacity: 0 } 100% { transform: none; opacity: 1 } }
+  .empty { color: var(--muted); text-align: center; padding: 32px 16px; background: var(--surface); border: 1.5px dashed var(--border); border-radius: 16px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 10px 2px 0; }
+
+  /* ---------- History ---------- */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
+  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .cal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px; margin-top: 14px; box-shadow: var(--shadow); }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .cal-head b { font-size: 17px; }
+  .icon-btn {
+    width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border);
+    background: var(--surface-2); display: grid; place-items: center; font-size: 18px; flex: none;
+  }
+  .icon-btn:disabled { opacity: .35; cursor: default; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .dow { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 0; }
+  .day {
+    aspect-ratio: 1; border: 0; border-radius: 10px; background: transparent;
+    display: grid; place-items: center; font-size: 15px; font-variant-numeric: tabular-nums; position: relative;
+  }
+  .day.full { background: var(--done); color: #fff; font-weight: 700; }
+  .day.partial { background: var(--partial-soft); color: var(--text); }
+  .day.partial::after { content: ""; position: absolute; bottom: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--partial); }
+  .day.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .day.sel { box-shadow: 0 0 0 3px var(--text) inset; }
+  .day.future { color: var(--muted); opacity: .45; }
+  .legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  /* ---------- Editor ---------- */
+  .edit-list { display: grid; gap: 10px; }
+  .erow { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 12px; box-shadow: var(--shadow); }
+  .erow-top { display: flex; gap: 8px; align-items: center; }
+  .erow-bottom { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .field {
+    width: 100%; min-width: 0; height: 44px; padding: 0 12px;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--bg);
+  }
+  .field:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .stepper { display: flex; align-items: center; gap: 6px; }
+  .stepper .field { width: 76px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; padding: 0 4px; }
+  .unit { width: 64px !important; text-align: center; }
+  .spacer { flex: 1; }
+  .icon-btn.danger { color: var(--danger); }
+  .erow-top .icon-btn { width: 38px; height: 44px; }
+  .btn {
+    display: block; width: 100%; height: 52px; border-radius: 14px; border: 0;
+    background: var(--accent); color: #fff; font-weight: 700; font-size: 16px; margin-top: 12px;
+  }
+  .btn.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  .btn.ghost-danger { background: transparent; color: var(--danger); border: 1px solid var(--border); }
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn-row .btn { margin-top: 0; }
+
+  /* ---------- Bottom nav ---------- */
+  nav.tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    display: flex; justify-content: center;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  nav.tabs .inner { display: flex; width: 100%; max-width: 520px; }
+  nav.tabs button {
+    flex: 1; border: 0; background: none; padding: 10px 0 12px; color: var(--muted);
+    display: grid; justify-items: center; gap: 2px; font-size: 12px;
+  }
+  nav.tabs button svg { width: 24px; height: 24px; }
+  nav.tabs button[aria-selected="true"] { color: var(--accent); font-weight: 700; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 84px); transform: translateX(-50%) translateY(20px);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 20; max-width: calc(100% - 32px);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%); }
+</style>
+</head>
+<body>
+<main class="app">
+  <section class="view" id="view-today"></section>
+  <section class="view" id="view-history" hidden></section>
+  <section class="view" id="view-edit" hidden></section>
+</main>
+
+<nav class="tabs" role="tablist">
+  <div class="inner">
+    <button role="tab" data-tab="today" aria-selected="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>
+      今日
+    </button>
+    <button role="tab" data-tab="history" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      紀錄
+    </button>
+    <button role="tab" data-tab="edit" aria-selected="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      項目
+    </button>
+  </div>
+</nav>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="import-file" accept="application/json,.json" hidden>
+
+<script>
+(() => {
+  'use strict';
+
+  const STORE_KEY = 'daily-fitness-v1';
+  const DEFAULT_TASKS = [
+    { id: 'pushup1',    name: 'Push Up（第 1 組）', reps: 15,  unit: '次' },
+    { id: 'pushup2',    name: 'Push Up（第 2 組）', reps: 15,  unit: '次' },
+    { id: 'kettlebell', name: '壺鈴',              reps: 100, unit: '次' },
+    { id: 'pullup',     name: '引體上升',          reps: 5,   unit: '次' },
+    { id: 'squat',      name: '深蹲',              reps: 50,  unit: '次' },
+  ];
+  const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+  const CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+  /* ---------- Storage ---------- */
+  function clone(x) { return JSON.parse(JSON.stringify(x)); }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (s && Array.isArray(s.tasks)) return { tasks: s.tasks, log: s.log || {} };
+    } catch (e) { /* fall through */ }
+    return { tasks: clone(DEFAULT_TASKS), log: {} };
+  }
+  let state = load();
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+    catch (e) { toast('⚠️ 儲存失敗，請匯出備份'); }
+  }
+  // Ask the browser not to evict our data under storage pressure.
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+
+  /* ---------- Dates (local time) ---------- */
+  const pad = n => String(n).padStart(2, '0');
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseYmd = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+  const today = () => ymd(new Date());
+  const fmtLong = s => { const d = parseYmd(s); return `${d.getMonth() + 1}月${d.getDate()}日 星期${WEEKDAYS[d.getDay()]}`; };
+  const fmtTime = ts => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+  /* ---------- Day log ----------
+     log[date] = { items: [{id,name,reps,unit}], done: { [id]: timestamp } }
+     Each day keeps its own snapshot of the task list, so editing tasks
+     later never rewrites past records. Today follows the live task list. */
+  const snapshot = () => state.tasks.map(t => ({ id: t.id, name: t.name, reps: t.reps, unit: t.unit }));
+  function getDay(date) {
+    if (date === today()) syncToday();
+    return state.log[date] || { items: snapshot(), done: {} };
+  }
+  function ensureDay(date) {
+    if (!state.log[date]) state.log[date] = { items: snapshot(), done: {} };
+    return state.log[date];
+  }
+  function syncToday() {
+    const d = state.log[today()];
+    if (!d) return;
+    d.items = snapshot();
+    for (const id of Object.keys(d.done)) if (!d.items.some(i => i.id === id)) delete d.done[id];
+  }
+  function dayStatus(date) {
+    const d = state.log[date];
+    if (!d || !d.items.length) return 'none';
+    const n = d.items.filter(i => d.done[i.id]).length;
+    if (n === 0) return 'none';
+    return n === d.items.length ? 'full' : 'partial';
+  }
+  function currentStreak() {
+    let d = today();
+    if (dayStatus(d) !== 'full') d = addDays(d, -1);
+    let n = 0;
+    while (dayStatus(d) === 'full') { n++; d = addDays(d, -1); }
+    return n;
+  }
+  function longestStreak() {
+    const days = Object.keys(state.log).filter(k => dayStatus(k) === 'full').sort();
+    let best = 0, cur = 0, prev = null;
+    for (const k of days) {
+      cur = prev && addDays(prev, 1) === k ? cur + 1 : 1;
+      best = Math.max(best, cur);
+      prev = k;
+    }
+    return best;
+  }
+  function toggle(date, id) {
+    if (date > today()) return;
+    const d = ensureDay(date);
+    if (!d.items.some(i => i.id === id)) return;
+    if (d.done[id]) {
+      delete d.done[id];
+    } else {
+      d.done[id] = Date.now();
+      try { navigator.vibrate && navigator.vibrate(dayStatus(date) === 'full' ? [30, 60, 30, 60, 80] : 25); } catch (e) {}
+    }
+    if (!Object.keys(d.done).length && date !== today()) delete state.log[date];
+    save();
+    render();
+  }
+
+  /* ---------- UI helpers ---------- */
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  let toastTimer;
+  function toast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+  function taskCard(date, item, done, compact, disabled) {
+    let meta = `${item.reps} ${esc(item.unit || '次')}`;
+    if (done) meta += ymd(new Date(done)) === date ? ` · ${fmtTime(done)} 完成` : ' · 已補記';
+    return `<button class="task${done ? ' done' : ''}${compact ? ' compact' : ''}" data-date="${date}" data-id="${esc(item.id)}"${disabled ? ' disabled' : ''} aria-pressed="${!!done}">
+      <span class="check">${CHECK_SVG}</span>
+      <span class="tbody"><span class="tname">${esc(item.name)}</span><span class="tmeta">${meta}</span></span>
+      <span class="treps">${item.reps}<small>${esc(item.unit || '次')}</small></span>
+    </button>`;
+  }
+
+  /* ---------- Today ---------- */
+  function renderToday() {
+    const date = today();
+    const day = getDay(date);
+    const total = day.items.length;
+    const n = day.items.filter(i => day.done[i.id]).length;
+    const full = total > 0 && n === total;
+    const C = 2 * Math.PI * 36;
+    const off = total ? C * (1 - n / total) : C;
+    const streak = currentStreak();
+
+    let html = `<div class="head">
+      <div class="head-text">
+        <div class="eyebrow">今日任務</div>
+        <h1>${fmtLong(date)}</h1>
+        <span class="chip">🔥 連續 ${streak} 日</span>
+      </div>
+      <div class="ring${full ? ' full' : ''}">
+        <svg viewBox="0 0 84 84"><circle class="track" cx="42" cy="42" r="36"/><circle class="bar" cx="42" cy="42" r="36" stroke-dasharray="${C}" stroke-dashoffset="${off}"/></svg>
+        <div class="ring-label">${n}/${total}</div>
+      </div>
+    </div>`;
+
+    if (!total) {
+      html += `<div class="empty">未有任何項目<br>去「項目」加返啲任務</div>`;
+    } else {
+      html += `<div class="tasks">${day.items.map(i => taskCard(date, i, day.done[i.id])).join('')}</div>`;
+      if (full) html += `<div class="banner">💪 今日任務全部完成！</div>`;
+      else html += `<p class="hint">做完一項就撳一下打剔；再撳一次可以取消。</p>`;
+    }
+    $('#view-today').innerHTML = html;
+  }
+
+  /* ---------- History ---------- */
+  let calMonth = today().slice(0, 7); // 'YYYY-MM'
+  let selDate = today();
+  function renderHistory() {
+    const t = today();
+    const [y, m] = calMonth.split('-').map(Number);
+    const first = new Date(y, m - 1, 1);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const monthFull = Object.keys(state.log).filter(k => k.startsWith(calMonth) && dayStatus(k) === 'full').length;
+
+    let cells = WEEKDAYS.map(w => `<div class="dow">${w}</div>`).join('');
+    for (let i = 0; i < first.getDay(); i++) cells += '<div></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = `${calMonth}-${pad(d)}`;
+      const cls = ['day', dayStatus(key)];
+      if (key === t) cls.push('today');
+      if (key === selDate) cls.push('sel');
+      if (key > t) cls.push('future');
+      cells += `<button class="${cls.join(' ')}" data-day="${key}"${key > t ? ' disabled' : ''}>${d}</button>`;
+    }
+
+    const day = getDay(selDate);
+    const isFuture = selDate > t;
+    const hasRecord = !!state.log[selDate];
+    let detail = `<h2>${fmtLong(selDate)}${selDate === t ? '（今日）' : ''}</h2>`;
+    if (!day.items.length) {
+      detail += `<div class="empty">呢日冇項目</div>`;
+    } else {
+      if (!hasRecord && selDate !== t) detail += `<p class="hint" style="margin:0 2px 10px">呢日未有紀錄。如果做咗但忘記剔，可以喺下面補記。</p>`;
+      detail += `<div class="tasks">${day.items.map(i => taskCard(selDate, i, day.done[i.id], true, isFuture)).join('')}</div>`;
+    }
+
+    const nowMonth = t.slice(0, 7);
+    $('#view-history').innerHTML = `
+      <div class="head"><div class="head-text"><div class="eyebrow">訓練紀錄</div><h1>紀錄</h1></div></div>
+      <div class="stats">
+        <div class="stat"><b>${currentStreak()}</b><span>目前連續日數</span></div>
+        <div class="stat"><b>${longestStreak()}</b><span>最長連續日數</span></div>
+        <div class="stat"><b>${monthFull}</b><span>${m}月完成日數</span></div>
+      </div>
+      <div class="cal">
+        <div class="cal-head">
+          <button class="icon-btn" data-month="-1" aria-label="上個月">‹</button>
+          <b>${y}年${m}月</b>
+          <button class="icon-btn" data-month="1" aria-label="下個月"${calMonth >= nowMonth ? ' disabled' : ''}>›</button>
+        </div>
+        <div class="grid">${cells}</div>
+        <div class="legend"><span><i style="background:var(--done)"></i>全部完成</span><span><i style="background:var(--partial)"></i>做咗部分</span></div>
+      </div>
+      ${detail}`;
+  }
+
+  /* ---------- Editor ---------- */
+  function renderEdit() {
+    const rows = state.tasks.map((t, idx) => `
+      <div class="erow" data-row="${esc(t.id)}">
+        <div class="erow-top">
+          <input class="field" data-f="name" data-id="${esc(t.id)}" value="${esc(t.name)}" placeholder="項目名稱" maxlength="40" aria-label="項目名稱">
+          <button class="icon-btn" data-act="up" data-id="${esc(t.id)}" aria-label="上移"${idx === 0 ? ' disabled' : ''}>↑</button>
+          <button class="icon-btn" data-act="down" data-id="${esc(t.id)}" aria-label="下移"${idx === state.tasks.length - 1 ? ' disabled' : ''}>↓</button>
+          <button class="icon-btn danger" data-act="del" data-id="${esc(t.id)}" aria-label="刪除">✕</button>
+        </div>
+        <div class="erow-bottom">
+          <div class="stepper">
+            <button class="icon-btn" data-act="dec" data-id="${esc(t.id)}" aria-label="減少">−</button>
+            <input class="field" data-f="reps" data-id="${esc(t.id)}" type="number" inputmode="numeric" min="1" max="9999" value="${t.reps}" aria-label="次數">
+            <button class="icon-btn" data-act="inc" data-id="${esc(t.id)}" aria-label="增加">＋</button>
+          </div>
+          <input class="field unit" data-f="unit" data-id="${esc(t.id)}" value="${esc(t.unit || '次')}" maxlength="6" aria-label="單位">
+        </div>
+      </div>`).join('');
+
+    $('#view-edit').innerHTML = `
+      <div class="head"><div class="head-text"><div class="eyebrow">每日任務設定</div><h1>項目</h1></div></div>
+      <div class="edit-list">${rows || '<div class="empty">未有項目</div>'}</div>
+      <button class="btn" data-act="add">＋ 新增項目</button>
+      <p class="hint">修改會即時套用到今日及之後；以前嘅紀錄唔會被改動。單位可以改做「秒」「分鐘」等。</p>
+
+      <h2>備份</h2>
+      <div class="btn-row">
+        <button class="btn secondary" data-act="export">匯出備份</button>
+        <button class="btn secondary" data-act="import">匯入備份</button>
+      </div>
+      <p class="hint">紀錄只儲存喺呢部手機嘅瀏覽器。清除瀏覽器資料或者換手機之前，記得先匯出備份。</p>
+      <button class="btn ghost-danger" data-act="reset">還原預設項目</button>`;
+  }
+
+  function findTask(id) { return state.tasks.find(t => t.id === id); }
+  function tasksChanged(rerender) {
+    syncToday();
+    save();
+    if (rerender) renderEdit();
+  }
+  const newId = () => 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  /* ---------- Render / tabs ---------- */
+  let tab = 'today';
+  function render() {
+    if (tab === 'today') renderToday();
+    else if (tab === 'history') renderHistory();
+    else renderEdit();
+  }
+  function setTab(next) {
+    tab = next;
+    for (const b of document.querySelectorAll('nav.tabs button')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+    for (const v of ['today', 'history', 'edit']) $('#view-' + v).hidden = v !== tab;
+    if (tab === 'history') { calMonth = today().slice(0, 7); selDate = today(); }
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  /* ---------- Events ---------- */
+  document.querySelector('nav.tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]');
+    if (b) setTab(b.dataset.tab);
+  });
+
+  document.addEventListener('click', e => {
+    const card = e.target.closest('.task[data-id]');
+    if (card) { toggle(card.dataset.date, card.dataset.id); return; }
+
+    const dayBtn = e.target.closest('[data-day]');
+    if (dayBtn) { selDate = dayBtn.dataset.day; renderHistory(); return; }
+
+    const mBtn = e.target.closest('[data-month]');
+    if (mBtn) {
+      const [y, m] = calMonth.split('-').map(Number);
+      const d = new Date(y, m - 1 + Number(mBtn.dataset.month), 1);
+      calMonth = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+      renderHistory();
+      return;
+    }
+
+    const act = e.target.closest('[data-act]');
+    if (!act) return;
+    const id = act.dataset.id;
+    const t = id && findTask(id);
+    const i = t ? state.tasks.indexOf(t) : -1;
+    switch (act.dataset.act) {
+      case 'inc': t.reps = Math.min(9999, t.reps + 1); tasksChanged(true); break;
+      case 'dec': t.reps = Math.max(1, t.reps - 1); tasksChanged(true); break;
+      case 'up':
+        if (i > 0) { [state.tasks[i - 1], state.tasks[i]] = [state.tasks[i], state.tasks[i - 1]]; tasksChanged(true); }
+        break;
+      case 'down':
+        if (i < state.tasks.length - 1) { [state.tasks[i + 1], state.tasks[i]] = [state.tasks[i], state.tasks[i + 1]]; tasksChanged(true); }
+        break;
+      case 'del':
+        if (confirm(`刪除「${t.name}」？\n（以前嘅紀錄會保留）`)) {
+          state.tasks.splice(i, 1);
+          tasksChanged(true);
+          toast('已刪除');
+        }
+        break;
+      case 'add': {
+        const nt = { id: newId(), name: '', reps: 10, unit: '次' };
+        state.tasks.push(nt);
+        tasksChanged(true);
+        const input = document.querySelector(`[data-f="name"][data-id="${nt.id}"]`);
+        if (input) { input.scrollIntoView({ block: 'center' }); input.focus(); }
+        break;
+      }
+      case 'export': exportData(); break;
+      case 'import': $('#import-file').click(); break;
+      case 'reset':
+        if (confirm('將項目還原做預設（Push Up ×2、壺鈴、引體上升、深蹲）？\n訓練紀錄會保留。')) {
+          state.tasks = clone(DEFAULT_TASKS);
+          tasksChanged(true);
+          toast('已還原預設項目');
+        }
+        break;
+    }
+  });
+
+  // Text edits: save as you type without re-rendering (keeps keyboard focus).
+  document.addEventListener('input', e => {
+    const f = e.target.dataset && e.target.dataset.f;
+    if (!f) return;
+    const t = findTask(e.target.dataset.id);
+    if (!t) return;
+    if (f === 'name') t.name = e.target.value;
+    else if (f === 'unit') t.unit = e.target.value;
+    else if (f === 'reps') {
+      const v = parseInt(e.target.value, 10);
+      if (v >= 1 && v <= 9999) t.reps = v;
+    }
+    tasksChanged(false);
+  });
+  // On blur: tidy up empty / invalid values.
+  document.addEventListener('change', e => {
+    const f = e.target.dataset && e.target.dataset.f;
+    if (!f) return;
+    const t = findTask(e.target.dataset.id);
+    if (!t) return;
+    if (f === 'name' && !t.name.trim()) t.name = e.target.value = '未命名項目';
+    if (f === 'unit' && !t.unit.trim()) t.unit = e.target.value = '次';
+    if (f === 'reps') e.target.value = t.reps;
+    tasksChanged(false); // no re-render: would close the keyboard if the user tapped into another field
+  });
+
+  /* ---------- Backup ---------- */
+  function exportData() {
+    const blob = new Blob([JSON.stringify({ app: 'daily-fitness', version: 1, exportedAt: new Date().toISOString(), ...state }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `fitness-backup-${today()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('已匯出備份');
+  }
+  $('#import-file').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      if (!Array.isArray(data.tasks) || typeof data.log !== 'object' || !data.log) throw new Error('bad');
+      const ok = data.tasks.every(t => t && typeof t.id === 'string' && typeof t.name === 'string' && Number.isFinite(t.reps));
+      if (!ok) throw new Error('bad');
+      if (!confirm(`匯入備份會取代現有資料（${Object.keys(data.log).length} 日紀錄）。繼續？`)) return;
+      state = { tasks: data.tasks, log: data.log };
+      save();
+      render();
+      toast('已匯入備份');
+    } catch (err) {
+      toast('⚠️ 檔案格式唔啱');
+    }
+  });
+
+  // Re-render when coming back to the app (e.g. after midnight).
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+
+  setTab('today');
+
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>
