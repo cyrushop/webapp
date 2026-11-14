@@ -26,3 +26,8 @@ python3 -m http.server 8000
 ```
 
 純 HTML/CSS/JS，冇 build step、冇外部依賴。
+
+---
+
+## 其他 app
+- [`mho-armor/`](mho-armor/)：Monster Hunter Outlanders 配裝器（揀武器＋AR，搵最佳防具組合同所需素材）
