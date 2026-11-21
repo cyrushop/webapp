@@ -82,11 +82,29 @@ npm test             # 單元 + 整合測試（含 /device 直連）
 **固定簽名（建議）**：未設定 secrets 時，CI 用每次 runner 臨時產生的 debug key 簽名，新舊 APK 簽名不同，更新前要先解除安裝舊版。一次性設定：
 
 ```sh
+# macOS / Linux（用 Android Studio 內置 JDK：/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/keytool）
 keytool -genkeypair -v -keystore mockbridge.jks -alias mockbridge -keyalg RSA -keysize 4096 -validity 10000
-base64 -w0 mockbridge.jks > mockbridge.jks.b64     # macOS: base64 -i mockbridge.jks
+base64 -i mockbridge.jks -o mockbridge.jks.b64        # Linux: base64 -w0 mockbridge.jks > mockbridge.jks.b64
 ```
 
-Repo → Settings → Secrets and variables → Actions，新增：`ANDROID_KEYSTORE_BASE64`（.b64 內容）、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`（`mockbridge`）、`ANDROID_KEY_PASSWORD`。keystore 檔本身唔好 commit 入 repo。
+```powershell
+# Windows PowerShell（Android Studio 內置 JDK："C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe"）
+& "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkeypair -v -keystore mockbridge.jks -alias mockbridge -keyalg RSA -keysize 4096 -validity 10000
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\mockbridge.jks")) | Set-Content -NoNewline mockbridge.jks.b64
+```
+
+Repo → Settings → Secrets and variables → Actions → New repository secret，新增 4 個：
+
+| Secret | 值 |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | `mockbridge.jks.b64` 整個檔案內容 |
+| `ANDROID_KEYSTORE_PASSWORD` | 建立時輸入的密碼 |
+| `ANDROID_KEY_ALIAS` | `mockbridge` |
+| `ANDROID_KEY_PASSWORD` | **同 keystore 密碼一樣**（新版 keytool 預設 PKCS12，唔支援分開嘅 key 密碼） |
+
+- `mockbridge.jks` 同密碼要另外備份（例如密碼管理器）。遺失咗就無法覆蓋安裝，只能解除安裝重來。
+- `.jks` / `.b64` 唔好 commit 入 repo（`.gitignore` 已排除）。設定完可刪除 `.b64` 檔。
+- CI 摘要會顯示證書 SHA-256；同一把 key 每次都一樣，即代表簽名已固定。
 
 **手機設定**
 

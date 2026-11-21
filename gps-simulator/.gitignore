@@ -4,3 +4,8 @@ build/
 local.properties
 *.iml
 .idea/
+# signing material — never commit
+*.jks
+*.keystore
+*.jks.b64
+keystore.properties
