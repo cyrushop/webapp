@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>GPS 定位控制器</title>
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🌸 GPS 定位控制器</div>
+    <div class="status">
+      <span id="wsDot" class="dot off" title="網頁 ↔ 本地橋接"></span><span id="wsText">未連線</span>
+      <span class="sep">|</span>
+      <span id="adbDot" class="dot off" title="橋接 ↔ 手機"></span><span id="adbText">手機未連線</span>
+      <span class="sep">|</span>
+      <span id="posText" class="mono">—</span>
+      <span class="sep">|</span>
+      <span id="spdText" class="mono">0.0 km/h</span>
+      <span id="modeText" class="pill">idle</span>
+    </div>
+    <button id="panelToggle" class="ghost small" aria-label="切換控制面板">☰</button>
+  </header>
+
+  <main class="layout">
+    <aside id="panel" class="panel">
+      <!-- movement card: always visible -->
+      <section class="card">
+        <div class="row between">
+          <strong>移動速度</strong>
+          <span><output id="speedOut" class="mono">6.0</output> km/h</span>
+        </div>
+        <input id="speed" type="range" min="1" max="25" step="0.5" value="6" />
+        <div class="row wrap gap">
+          <button class="chip" data-speed="4.5">🚶 慢走 4.5</button>
+          <button class="chip" data-speed="6.5">🚶‍♂️ 快走 6.5</button>
+          <button class="chip" data-speed="9">🏃 慢跑 9</button>
+          <button class="chip" data-speed="15">🚲 單車 15</button>
+          <button class="chip accent" id="bloomPreset">🌸 種花預設 <span id="bloomPresetVal">7</span></button>
+        </div>
+        <p id="speedWarn" class="warn hidden">⚠️ 社群資料指種花上限約 16–20 km/h（非官方數字），超過可能停止種花／計距離。</p>
+        <div class="grid2">
+          <label>GPS 漂移半徑 (m)
+            <input id="jitter" type="number" min="0" max="30" step="0.5" value="3" />
+          </label>
+          <label>速度波動 ±%
+            <input id="variance" type="number" min="0" max="50" step="1" value="8" />
+          </label>
+        </div>
+        <label class="check"><input id="jitterIdle" type="checkbox" checked /> 靜止時亦加入漂移</label>
+      </section>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="tp">瞬移</button>
+        <button class="tab" data-tab="route">路線</button>
+        <button class="tab" data-tab="fav">收藏</button>
+        <button class="tab" data-tab="cd">冷卻</button>
+        <button class="tab" data-tab="dev">裝置</button>
+      </nav>
+
+      <!-- teleport -->
+      <section class="tabpane active" id="tab-tp">
+        <form id="searchForm" class="row gap">
+          <input id="searchInput" type="text" placeholder="35.658581, 139.745433 或地名 / Google Maps 連結" autocomplete="off" />
+          <button type="submit">搜尋</button>
+        </form>
+        <ul id="searchResults" class="list"></ul>
+        <div id="targetBox" class="card hidden">
+          <div class="row between"><strong>目標點</strong><span id="targetCoords" class="mono small"></span></div>
+          <div id="targetInfo" class="small muted"></div>
+          <div class="row wrap gap">
+            <button id="tpGo" class="primary">⚡ 瞬移到此</button>
+            <button id="tpFav">⭐ 收藏</button>
+            <button id="tpWaypoint">➕ 加為路徑點</button>
+          </div>
+        </div>
+        <p class="hint">提示：在「🎯 選點」模式下點擊地圖即可設定目標點；地圖上的藍點是手機目前定位。</p>
+      </section>
+
+      <!-- route -->
+      <section class="tabpane" id="tab-route">
+        <div class="row between">
+          <strong>路徑點 (<span id="wpCount">0</span>)</strong>
+          <div class="row gap">
+            <button id="wpUndo" class="small">↶ 復原</button>
+            <button id="wpClear" class="small danger">清除</button>
+          </div>
+        </div>
+        <ol id="wpList" class="list compact"></ol>
+        <p class="hint">切換地圖右上「✏️ 畫路線」後點擊地圖加入路徑點，可拖曳調整。</p>
+
+        <div class="grid2">
+          <label>路線類型
+            <select id="routing">
+              <option value="road">沿道路（OSRM 步行）</option>
+              <option value="straight">直線</option>
+            </select>
+          </label>
+          <label>循環模式
+            <select id="loopMode">
+              <option value="once">單次（到終點停）</option>
+              <option value="pingpong">往返</option>
+              <option value="circuit" selected>閉環繞圈</option>
+            </select>
+          </label>
+        </div>
+        <button id="buildRoute" class="primary block">🧭 生成並載入路線</button>
+        <div id="routeInfo" class="small muted"></div>
+
+        <div class="row gap">
+          <button id="routeStart" class="primary">▶ 開始</button>
+          <button id="routePause">⏸ 暫停</button>
+          <button id="routeStop">⏹ 停止</button>
+        </div>
+        <div class="progress"><div id="routeBar"></div></div>
+        <div id="routeStatus" class="small mono"></div>
+
+        <div class="row gap wrap">
+          <label class="filebtn">📂 匯入 GPX<input id="gpxIn" type="file" accept=".gpx,application/gpx+xml" hidden /></label>
+          <button id="gpxOut">💾 匯出 GPX</button>
+        </div>
+      </section>
+
+      <!-- favourites -->
+      <section class="tabpane" id="tab-fav">
+        <div class="row gap">
+          <input id="favFilter" type="text" placeholder="搜尋名稱 / #標籤" />
+          <button id="favAddHere" title="把手機目前位置加入收藏">＋ 目前位置</button>
+        </div>
+        <div id="tagChips" class="row wrap gap"></div>
+        <ul id="favList" class="list"></ul>
+        <div class="row gap wrap">
+          <button id="favExport">💾 匯出 JSON</button>
+          <label class="filebtn">📂 匯入 JSON<input id="favImport" type="file" accept=".json,application/json" hidden /></label>
+        </div>
+      </section>
+
+      <!-- cooldown -->
+      <section class="tabpane" id="tab-cd">
+        <div class="card">
+          <div class="row between"><strong>上次互動點</strong><span id="cdLast" class="small mono">未記錄</span></div>
+          <div id="cdLive" class="big mono">—</div>
+          <div id="cdDetail" class="small muted"></div>
+          <div class="row gap wrap">
+            <button id="cdMark" class="primary">📍 我剛在此互動（記錄）</button>
+            <button id="cdClear">清除記錄</button>
+          </div>
+          <label class="check"><input id="autoMark" type="checkbox" checked /> 每次瞬移自動當作一次互動</label>
+        </div>
+        <details>
+          <summary>冷卻表（距離 km → 等待分鐘，可自訂）</summary>
+          <p class="warn small">⚠️ 此表源自 Pokémon GO 玩家社群測試，並非 Niantic / Scopely 官方數據，亦未證實適用於 Pikmin Bloom。僅作保守參考。</p>
+          <textarea id="cdTable" rows="10" class="mono"></textarea>
+          <button id="cdApply">套用</button>
+        </details>
+      </section>
+
+      <!-- device -->
+      <section class="tabpane" id="tab-dev">
+        <div class="card">
+          <div id="devStatus" class="small mono"></div>
+          <div class="row gap wrap">
+            <button id="devRefresh">🔄 掃描裝置</button>
+            <select id="devSelect"></select>
+            <button id="devConnect">連接</button>
+          </div>
+          <div class="row gap wrap">
+            <button id="devSetup" class="primary">🛠 一鍵設定手機</button>
+            <button id="devStop" class="danger">🛑 還原真實 GPS</button>
+          </div>
+          <pre id="devLog" class="log hidden"></pre>
+        </div>
+        <details>
+          <summary>種花預設速度 / 進階</summary>
+          <label>🌸 種花預設速度 (km/h)
+            <input id="bloomSpeed" type="number" min="1" max="20" step="0.5" value="7" />
+          </label>
+          <label>回報精度 (m)
+            <input id="accuracy" type="number" min="1" max="100" step="1" value="5" />
+          </label>
+          <label>OSRM 步行路線服務 URL
+            <input id="osrmUrl" type="text" />
+          </label>
+        </details>
+        <p class="hint">首次使用：手機開啟「開發者選項 → USB 偵錯」，安裝 Mock App 後按「一鍵設定手機」，並在「開發者選項 → 選取模擬位置應用程式」選擇它。詳見 README。</p>
+      </section>
+    </aside>
+
+    <div class="mapwrap">
+      <div id="map"></div>
+      <div class="mapmode">
+        <button id="modePick" class="active">🎯 選點</button>
+        <button id="modeDraw">✏️ 畫路線</button>
+        <button id="followBtn" class="active" title="地圖跟隨手機位置">📡 跟隨</button>
+      </div>
+      <div id="joystick" class="joystick" title="拖曳或使用 W/A/S/D、方向鍵">
+        <div id="knob" class="knob"></div>
+      </div>
+      <div id="toast" class="toast hidden"></div>
+    </div>
+  </main>
+
+  <dialog id="confirmDlg">
+    <form method="dialog">
+      <h3 id="confirmTitle">確認</h3>
+      <p id="confirmBody"></p>
+      <div class="row gap end">
+        <button value="cancel">取消</button>
+        <button value="ok" class="primary">仍然執行</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

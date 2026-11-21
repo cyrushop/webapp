@@ -1,0 +1,20 @@
+{
+  "name": "gps-simulator-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local bridge: web UI <-> WebSocket <-> ADB <-> Android mock location app",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dry": "DRY_RUN=1 node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "ws": "^8.18.0"
+  }
+}

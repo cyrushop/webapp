@@ -26,3 +26,9 @@ python3 -m http.server 8000
 ```
 
 純 HTML/CSS/JS，冇 build step、冇外部依賴。
+
+---
+
+## 另一個專案：GPS 定位控制器
+
+`gps-simulator/` 係一個獨立嘅瀏覽器 GPS 模擬控制器（Node.js 本地橋接 + ADB + Android Mock App），詳見 [gps-simulator/README.md](gps-simulator/README.md)。
