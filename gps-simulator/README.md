@@ -44,6 +44,18 @@
 | 冷卻計算器 | 記錄互動點 → 實時倒數；瞬移前檢查並要求確認；冷卻表可編輯 |
 | 還原真實 GPS | 移除 test providers 並停止服務 |
 
+## Mac 快速開始
+
+電腦端唔係獨立 App：係一個本地橋接程式（Node.js）＋ 瀏覽器網頁。Mac 需要：
+
+1. **Node.js LTS**：https://nodejs.org/ → macOS Installer (.pkg)（或 `brew install node`）
+2. **adb（Android Platform-Tools）**：`brew install --cask android-platform-tools`，或下載 https://dl.google.com/android/repository/platform-tools-latest-darwin.zip 解壓到 `~/platform-tools`
+3. **本專案**：下載 repo（GitHub 頁面 → Code → Download ZIP，或 `git clone`）
+
+然後雙擊 `gps-simulator/start-mac.command`：會檢查 Node/adb、第一次自動 `npm ci`、啟動橋接並打開 http://127.0.0.1:8787/。
+
+若 macOS 話「無法打開，來自未識別的開發者」：開「終端機」，輸入 `bash ` （後面有空格），把 `start-mac.command` 拖入視窗，按 Enter；或到 系統設定 → 私隱與安全性 → 仍要打開。
+
 ## 安裝與執行
 
 ### 1. 電腦端（需要 Node.js ≥ 18 與 Android platform-tools）
