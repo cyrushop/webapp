@@ -57,7 +57,7 @@ jobs:
         run: echo "ANDROID_HOME=$ANDROID_HOME" && ls "$ANDROID_HOME/platforms" "$ANDROID_HOME/build-tools" | tail -n 12
 
       # Also validates gradle-wrapper.jar against the official checksums.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       - name: Decode signing key (optional)
         env:
@@ -84,12 +84,13 @@ jobs:
           name="mock-location-bridge-${GITHUB_SHA::7}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$name"
           echo "name=$name" >> "$GITHUB_OUTPUT"
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$GITHUB_WORKSPACE/$name" | head -3 || true
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)/apksigner"
+          "$apksigner" verify --print-certs "$GITHUB_WORKSPACE/$name" | head -3 | tee -a "$GITHUB_STEP_SUMMARY"
           echo "### APK" >> "$GITHUB_STEP_SUMMARY"
           echo "\`$name\` — $(du -h "$GITHUB_WORKSPACE/$name" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
           echo "sha256: \`$(sha256sum "$GITHUB_WORKSPACE/$name" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: mock-location-bridge-apk
           path: ${{ github.workspace }}/${{ steps.apk.outputs.name }}
@@ -104,7 +105,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: mock-location-bridge-apk
       - uses: softprops/action-gh-release@v2
