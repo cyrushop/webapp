@@ -47,7 +47,10 @@ const server = http.createServer((req, res) => {
   let rel = decodeURIComponent(url.pathname);
   if (rel === '/') rel = '/index.html';
   let root = WEB_ROOT;
-  if (rel.startsWith('/vendor/leaflet/')) {
+  if (rel === '/lib/planting.js') {
+    root = __dirname;
+    rel = '/planting.js';
+  } else if (rel.startsWith('/vendor/leaflet/')) {
     root = LEAFLET_ROOT;
     rel = rel.slice('/vendor/leaflet'.length);
   }
@@ -161,6 +164,7 @@ const handlers = {
   joystick: (d) => (engine.setJoystick(d.x, d.y), { ok: true }),
   settings: (d) => (engine.updateSettings(d), { ok: true }),
   markAction: () => (engine.markAction(), { ok: true }),
+  resetPlanting: () => (engine.resetPlanting(), { ok: true }),
   clearAction: () => (engine.clearAction(), { ok: true }),
   cooldown: (d) => ({ ok: true, cooldown: engine.cooldownFor({ lat: Number(d.lat), lng: Number(d.lng) }) }),
   stopMocking: () => (engine.stopMocking(), { ok: true }),

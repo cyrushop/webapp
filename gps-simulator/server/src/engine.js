@@ -9,6 +9,7 @@ import {
   isValidLatLng,
 } from './geo.js';
 import { RoutePlayer, LOOP_MODES } from './route.js';
+import { PlantingTracker, DEFAULT_PLANTING } from './planting.js';
 
 const KMH_TO_MS = 1000 / 3600;
 
@@ -45,6 +46,7 @@ export class Engine extends EventEmitter {
     this.joystick = { x: 0, y: 0 };
     this.lastAction = null; // { lat, lng, at }
     this.drift = new Drift({ amplitudeM: this.settings.jitterM, rng });
+    this.planting = new PlantingTracker(DEFAULT_PLANTING);
     this.mocking = true; // false after "restore real GPS"
     this.timer = null;
     this.lastTick = Date.now();
@@ -78,6 +80,7 @@ export class Engine extends EventEmitter {
       if (this.route) this.rebuildRoute(true);
     }
     if (typeof patch.autoMarkOnTeleport === 'boolean') s.autoMarkOnTeleport = patch.autoMarkOnTeleport;
+    if (patch.planting && typeof patch.planting === 'object') this.planting.update(patch.planting);
     if (Array.isArray(patch.cooldownTable)) {
       const rows = patch.cooldownTable
         .map((r) => [Number(r[0]), Number(r[1])])
@@ -219,6 +222,11 @@ export class Engine extends EventEmitter {
     }
   }
 
+  resetPlanting() {
+    this.planting.reset();
+    this.emitState();
+  }
+
   stopMocking() {
     this.pauseRoute();
     this.mocking = false;
@@ -254,6 +262,7 @@ export class Engine extends EventEmitter {
       }
     }
     this.currentSpeed = dt > 0 ? moved / dt : 0;
+    if (this.mocking) this.planting.tick({ dt, movedM: moved, position: this.position, now });
 
     const moving = moved > 0;
     this.output = moving || s.jitterWhenIdle ? this.drift.apply(this.position) : { ...this.position };
@@ -292,6 +301,7 @@ export class Engine extends EventEmitter {
           }
         : null,
       lastAction: this.lastAction,
+      planting: this.planting.snapshot(),
       tickMs: this.tickMs,
     };
   }

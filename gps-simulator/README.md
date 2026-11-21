@@ -41,6 +41,7 @@
 | 速度滑桿 + 預設 | 1–25 km/h；慢走 / 快走 / 慢跑 / 單車；🌸 種花預設（可自訂，預設 7） |
 | 擬真漂移 | 均值回歸隨機漫步（非每秒亂跳），半徑可調；速度 ±% 波動 |
 | 虛擬搖桿 | 滑鼠 / 觸控拖曳 + `W A S D` / 方向鍵；按住時每 250ms 重送，失焦自動停 |
+| 種花數量估算（新增） | 「種花」分頁：即時估計已種花朵、花瓣消耗、重複格浪費、超速時間；按隊伍數量、速度、路線長度預估每圈／每小時朵數；參數可用遊戲日記校正 |
 | 冷卻計算器 | 記錄互動點 → 實時倒數；瞬移前檢查並要求確認；冷卻表可編輯 |
 | 還原真實 GPS | 移除 test providers 並停止服務 |
 
@@ -147,6 +148,7 @@ adb shell am broadcast -n com.pikminbridge.mock/.CommandReceiver \
 - Android App 由 GitHub Actions 編譯（開發環境無法連線 Google Maven）；**未在實機上測試**。
 - 遊戲是否接受 `LocationManager` test provider 的座標，取決於遊戲使用的定位來源；App 同時餵 `gps`、`network`、`fused`（API 31+）及 Google Play Services Fused（`setMockMode`）。實際效果未經驗證。
 - **種花速度上限**：社群資料（Pikipedia）指約 16–20 km/h，非官方數字；UI 在 ≥16 km/h 顯示警告。🌸 預設 7 km/h 為保守值，並非已證實的「最佳」值。
+- **種花估算**：遊戲冇公開公式。預設值來自玩家實測（40 隻約每 10 秒 6 片花瓣、10–19 隻約每 20 秒 3 片；步行約 36 朵/片、單車 17–19 km/h 約 50 朵/片；同一格約 5 分鐘內不能重種），20–39 隻為線性插值，格子大小 10 m 為假設值。請以遊戲日記實際數字校正。
 - **冷卻表**：源自 Pokémon GO 玩家社群測試，非 Niantic／Scopely 官方數據，未證實適用於 Pikmin Bloom。
 - 公共 OSRM（routing.openstreetmap.de）與 Nominatim 有使用政策與速率限制，只適合個人少量使用；可在「裝置 → 進階」更換 OSRM URL。
 - 規格書建議 React/Vue + Tailwind、Socket.io；本實作改用原生 JS + 原生 WebSocket（`ws`），零建置步驟、依賴只有 `ws` 與 `leaflet`。

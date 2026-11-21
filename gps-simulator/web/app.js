@@ -1,5 +1,6 @@
 /* global L */
 // GPS 定位控制器 — browser UI. Talks to the local bridge over WebSocket (/ws).
+import { estimateRoute } from './lib/planting.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -233,6 +234,7 @@ function onState(s) {
   $('modeText').textContent = s.mocking ? modeName : '已還原真實 GPS';
   syncSettings(s.settings);
   renderRouteStatus(s.route);
+  renderPlanting(s);
   renderCooldown();
   if (s.adb) onAdb(s.adb);
   if (s.device) onDevice({ ...s.device, transport: s.transport });
@@ -782,6 +784,81 @@ $('favImport').onchange = async (e) => {
   } catch (err) {
     toast(`匯入失敗：${err.message}`);
   }
+};
+
+// ------------------------------------------------------------------ flower planting estimate
+const fmtInt = (n) => Math.round(n).toLocaleString('en-US');
+let plantingDirty = 0;
+function pushPlanting(patch) {
+  plantingDirty = Date.now();
+  pushSettings({ planting: patch });
+}
+function renderPlanting(s) {
+  const p = s.planting;
+  if (!p) return;
+  const cfg = p.cfg;
+  $('bloomFlowers').textContent = `${fmtInt(p.flowers)} 朵`;
+  const wastedPct = p.petalsUsed > 0 ? (p.petalsWasted / p.petalsUsed) * 100 : 0;
+  $('bloomStats').innerHTML = [
+    `已用花瓣 ${p.petalsUsed.toFixed(1)}${p.petalsLeft != null ? `（剩 ${p.petalsLeft.toFixed(0)}）` : ''}`,
+    `重複格浪費 ${p.petalsWasted.toFixed(1)} 片（${wastedPct.toFixed(0)}%）`,
+    `最近 1 分鐘速率 ≈ ${fmtInt(p.flowersPerHourNow)} 朵/小時`,
+    `種花時間 ${fmtDur(p.plantingSec)}　超速 ${fmtDur(p.overSpeedSec)}`,
+    s.speedKmh > cfg.speedCapKmh ? `<span class="warn">⚠️ 現時 ${s.speedKmh.toFixed(1)} km/h 超過上限 ${cfg.speedCapKmh}，唔會種花</span>` : '',
+  ]
+    .filter(Boolean)
+    .join('<br>');
+  if (Date.now() - plantingDirty > 1500) {
+    if (document.activeElement !== $('squad')) {
+      $('squad').value = cfg.squad;
+      $('squadOut').value = cfg.squad;
+    }
+    if (document.activeElement !== $('petalsAvail')) $('petalsAvail').value = cfg.petalsAvailable;
+    document.querySelectorAll('[data-pl]').forEach((el) => {
+      if (document.activeElement !== el) el.value = cfg[el.dataset.pl];
+    });
+  }
+  renderPlan(s);
+}
+function renderPlan(s) {
+  const cfg = s.planting.cfg;
+  const speed = s.settings.speedKmh;
+  const lines = [];
+  const rt = s.route;
+  const base = estimateRoute(cfg, { lapM: 1e9, speedKmh: speed });
+  lines.push(`以 ${speed} km/h、${cfg.squad} 隻皮克敏：約 <b>${fmtInt(base.flowersPerHour)} 朵/小時</b>，用 ${fmtInt(base.petalsPerHour)} 片花瓣/小時`);
+  if (base.hoursUntilEmpty != null) {
+    const h = base.hoursUntilEmpty;
+    lines.push(`現有花瓣約可種 ${h >= 1 ? `${h.toFixed(1)} 小時` : `${Math.round(h * 60)} 分鐘`}`);
+  }
+  let routeLine = '';
+  if (rt && rt.lengthM > 0) {
+    const pingpong = rt.mode === 'pingpong';
+    const r = estimateRoute(cfg, { lapM: rt.lengthM, speedKmh: speed, pingpong });
+    routeLine = `目前路線：每圈 ${fmtDur(r.lapSec)}，第一圈約 ${fmtInt(r.flowersFirstLap)} 朵`;
+    if (rt.mode !== 'once') {
+      routeLine += `，之後每圈約 ${fmtInt(r.flowersPerLap)} 朵，循環約 <b>${fmtInt(r.flowersPerHour)} 朵/小時</b>`;
+      if (r.fresh < 1) routeLine += `<br><span class="warn">⚠️ 同一位置 ${cfg.cooldownMin} 分鐘內會再經過，只有約 ${(r.fresh * 100).toFixed(0)}% 經過有效；加長路線或減慢速度可改善</span>`;
+    }
+    lines.push(routeLine);
+  }
+  if (base.overCap) lines.push(`<span class="warn">⚠️ 速度超過 ${cfg.speedCapKmh} km/h 上限，估算為 0</span>`);
+  $('bloomPlan').innerHTML = lines.join('<br>');
+  $('routePlan').innerHTML = routeLine ? `🌸 ${routeLine}` : '';
+}
+$('squad').oninput = (e) => {
+  $('squadOut').value = e.target.value;
+  pushPlanting({ squad: Number(e.target.value) });
+};
+$('petalsAvail').onchange = (e) => pushPlanting({ petalsAvailable: Math.max(0, Number(e.target.value) || 0) });
+document.querySelectorAll('[data-pl]').forEach((el) => {
+  el.onchange = () => {
+    const v = Number(el.value);
+    if (Number.isFinite(v) && v >= 0) pushPlanting({ [el.dataset.pl]: v });
+  };
+});
+$('bloomReset').onclick = async () => {
+  if (await confirmDialog('重設種花統計？', '已種花、已用花瓣等數字會歸零（設定保留）。')) rpc('resetPlanting');
 };
 
 // ------------------------------------------------------------------ cooldown
