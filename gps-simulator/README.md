@@ -9,12 +9,17 @@
 ## 架構
 
 ```
-┌──────────────┐  WebSocket /ws  ┌───────────────────────┐  adb shell (常駐)   ┌──────────────────────┐
-│ 瀏覽器 Web UI │ ──────────────▶ │ 本地橋接 server/       │ ─────────────────▶ │ Android Mock App      │
-│ Leaflet 地圖  │ ◀── state 10Hz ─│ Engine（路線/搖桿/漂移）│  am broadcast ~1Hz │ test providers:       │
-│ 搖桿 / WASD   │                 │ AdbBridge（背壓丟棄）   │                    │ gps / network / fused │
-└──────────────┘                 └───────────────────────┘                    └──────────────────────┘
+┌──────────────┐  WebSocket /ws  ┌───────────────────────┐ ① USB 直連（預設）          ┌──────────────────────┐
+│ 瀏覽器 Web UI │ ──────────────▶ │ 本地橋接 server/       │   WebSocket /device         │ Android Mock App      │
+│ Leaflet 地圖  │ ◀── state 10Hz ─│ Engine（路線/搖桿/漂移）│ ◀═ adb reverse tcp:8787 ══▶ │ BridgeClient (OkHttp) │
+│ 搖桿 / WASD   │                 │ DeviceLink / AdbBridge │ ② 後備：am broadcast        │ test providers:       │
+└──────────────┘                 └───────────────────────┘ ─────────────────────────▶  │ gps / network / fused │
+                                                                                         └──────────────────────┘
 ```
+
+- **① USB 直連（預設）**：橋接連上 adb 後自動執行 `adb reverse tcp:8787 tcp:8787`；手機 App 連去自己的 `ws://127.0.0.1:8787/device`，經 USB 通道到電腦。每個座標只係一個細 WebSocket frame，唔使每秒喺手機開一個 `am` 進程。拔線後每 2 秒自動重連，電腦端每 5 秒自動重建 `adb reverse`。
+- **② ADB 廣播（後備）**：直連未接通時自動改用 `am broadcast`。
+- `TRANSPORT=ws|adb` 可強制只用其中一種。
 
 - **移動狀態機在電腦後端**：瀏覽器分頁縮小／背景化都不會影響行走。
 - 橋接只監聽 `127.0.0.1`，並拒絕非本機來源（Origin）的 WebSocket，防止其他網站操控你的手機定位。
@@ -49,7 +54,7 @@ npm install
 npm start            # http://127.0.0.1:8787
 # 沒有手機時試介面：
 npm run dry          # DRY_RUN=1，不呼叫 adb
-npm test             # 13 個單元測試
+npm test             # 單元 + 整合測試（含 /device 直連）
 ```
 
 環境變數：
@@ -63,18 +68,44 @@ npm test             # 13 個單元測試
 | `ADB_SERIAL` | 第一部裝置 | 多部手機時指定 |
 | `MOCK_PKG` | `com.pikminbridge.mock` | |
 | `DRY_RUN` | 關 | |
+| `TRANSPORT` | `auto` | `auto`＝直連優先、廣播後備；`ws`；`adb` |
+| `DEVICE_ALLOW_LAN` | 關 | 容許 LAN 上的手機直接連 `/device`（Wi-Fi，無 USB）。預設只接受經 `adb reverse` 的本機連線 |
 
 ### 2. 手機端 Mock App
 
-1. 用 Android Studio 開啟 `gps-simulator/android/`（Gradle 同步會自動下載 wrapper 所需的 Gradle 8.11.1），Run 到手機。
-   - 本 repo 未附 `gradlew` / `gradle-wrapper.jar`（二進位檔）；Android Studio 不需要它們。要用命令列可在該資料夾執行 `gradle wrapper`。
+**取得 APK（三選一）**
+
+- **GitHub Actions（推薦）**：每次 push 到 `gps-simulator/**` 都會自動 build。到 repo → Actions → *GPS Simulator CI* → 最新一次 run → Artifacts 下載 `mock-location-bridge-apk`（zip 內是 APK），然後 `adb install -r mock-location-bridge-xxxxxxx.apk`。
+- **Release**：push 一個 `gps-sim-v*` tag（例如 `git tag gps-sim-v0.2.0 && git push origin gps-sim-v0.2.0`），CI 會把 APK 附加到 GitHub Release。
+- **本機**：`cd gps-simulator/android && ./gradlew assembleRelease`，或用 Android Studio 開啟該資料夾。
+
+**固定簽名（建議）**：未設定 secrets 時，CI 用每次 runner 臨時產生的 debug key 簽名，新舊 APK 簽名不同，更新前要先解除安裝舊版。一次性設定：
+
+```sh
+keytool -genkeypair -v -keystore mockbridge.jks -alias mockbridge -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 mockbridge.jks > mockbridge.jks.b64     # macOS: base64 -i mockbridge.jks
+```
+
+Repo → Settings → Secrets and variables → Actions，新增：`ANDROID_KEYSTORE_BASE64`（.b64 內容）、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`（`mockbridge`）、`ANDROID_KEY_PASSWORD`。keystore 檔本身唔好 commit 入 repo。
+
+**手機設定**
+
+1. 安裝 APK（見上）。
 2. 手機：設定 → 關於手機 → 連按「版本號碼」開啟開發者選項 → 開啟 **USB 偵錯**。
 3. 接 USB，在手機上允許此電腦。
 4. 網頁「裝置」分頁 → **🛠 一鍵設定手機**（執行 `appops set … android:mock_location allow`、授予定位權限、啟動 App）。
 5. 若仍未生效：開發者選項 → **選取模擬位置應用程式** → Mock Location Bridge。
 6. App 內按「3. 啟動模擬服務」，通知列出現常駐通知即可。
 
-手動測試指令：
+### Pixel 10 Pro / Android 17 注意事項
+
+- 安裝：Google 的「開發者驗證」新規則**不影響 `adb install`**（官方 FAQ 明言 ADB 流程不變）；首批強制地區為巴西、印尼、新加坡、泰國，2027 年擴展至全球。
+- 背景啟動限制：Android 12+ 禁止大部分情況由背景啟動前景服務，所以 `am broadcast` 後備路徑喺 App 未開時可能起唔到服務。USB 直連由 App 前台啟動一次後一直常駐，冇呢個問題；「一鍵設定手機」會用 `am start` 由前台開 App。
+- 明文連線：Android 17 要求用 network security config 宣告明文連線；App 只對 `127.0.0.1`/`localhost` 開放 `ws://`，其他一律維持只限 TLS。
+- `ACCESS_LOCAL_NETWORK`：Android 17 新權限只適用於 **targetSdk 37+** 的 App；本 App target 35，且只連 loopback。
+- 電池最佳化：如 Pixel 喺螢幕關閉後殺咗服務，到 設定 → 應用程式 → Mock Location Bridge → 電池 → 選「不受限制」。
+
+手動測試指令（後備廣播路徑）：
 
 ```sh
 adb shell am broadcast -n com.pikminbridge.mock/.CommandReceiver \
@@ -83,7 +114,7 @@ adb shell am broadcast -n com.pikminbridge.mock/.CommandReceiver \
 
 ## 已知限制 / 未驗證事項
 
-- **Android App 未在此環境編譯**（建置環境無法連線 Google Maven）。程式碼按 Android API 文件撰寫，第一次 Gradle 同步若有版本衝突，請讓 Android Studio 升級 AGP/Kotlin 版本。
+- Android App 由 GitHub Actions 編譯（開發環境無法連線 Google Maven）；**未在實機上測試**。
 - 遊戲是否接受 `LocationManager` test provider 的座標，取決於遊戲使用的定位來源；App 同時餵 `gps`、`network`、`fused`（API 31+）及 Google Play Services Fused（`setMockMode`）。實際效果未經驗證。
 - **種花速度上限**：社群資料（Pikipedia）指約 16–20 km/h，非官方數字；UI 在 ≥16 km/h 顯示警告。🌸 預設 7 km/h 為保守值，並非已證實的「最佳」值。
 - **冷卻表**：源自 Pokémon GO 玩家社群測試，非 Niantic／Scopely 官方數據，未證實適用於 Pikmin Bloom。

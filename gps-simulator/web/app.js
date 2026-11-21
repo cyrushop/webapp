@@ -108,6 +108,7 @@ function connect() {
     if (type === 'state') onState(data);
     else if (type === 'route') onServerRoute(data);
     else if (type === 'adb') onAdb(data);
+    else if (type === 'device') onDevice(data);
     else if (type === 'reply') {
       const fn = pending.get(data.id);
       if (fn) {
@@ -234,23 +235,49 @@ function onState(s) {
   renderRouteStatus(s.route);
   renderCooldown();
   if (s.adb) onAdb(s.adb);
+  if (s.device) onDevice({ ...s.device, transport: s.transport });
   if (s.lastAction) actionMarker.setLatLng([s.lastAction.lat, s.lastAction.lng]).addTo(map);
   else actionMarker.remove();
 }
 
+let lastAdb = null;
+let lastDevice = null;
 function onAdb(a) {
-  if (a.dryRun) setDot('adb', 'warn', 'DRY RUN');
-  else if (a.connected) setDot('adb', a.lastError ? 'warn' : 'on', `手機 ${a.serial || ''}`);
+  lastAdb = a;
+  renderLink();
+}
+function onDevice(d) {
+  lastDevice = { ...lastDevice, ...d };
+  renderLink();
+}
+function renderLink() {
+  const a = lastAdb;
+  const d = lastDevice;
+  const transport = d?.transport || server?.transport || 'none';
+  if (transport === 'ws' && d) {
+    setDot('adb', d.mockApp === false || d.error ? 'warn' : 'on', `USB 直連${d.rttMs != null ? ` ${d.rttMs} ms` : ''}`);
+  } else if (a?.dryRun) setDot('adb', 'warn', 'DRY RUN');
+  else if (transport === 'adb' && a) setDot('adb', a.lastError ? 'warn' : 'on', `ADB 廣播 ${a.serial || ''}`);
   else setDot('adb', 'off', '手機未連線');
-  $('devStatus').innerHTML = [
-    `模式：${a.dryRun ? 'DRY RUN（模擬）' : 'ADB'}`,
-    `裝置：${esc(a.serial || '—')}　連線：${a.connected ? '✅' : '❌'}`,
-    `App 套件：${esc(a.pkg)}`,
-    `已送出：${a.sent}　丟棄：${a.dropped}　待回應：${a.pending}`,
-    a.lastError ? `<span class="warn">最近錯誤：${esc(a.lastError)}</span>` : '',
-  ]
-    .filter(Boolean)
-    .join('<br>');
+
+  const lines = [];
+  lines.push(`<b>傳送方式：${{ ws: 'USB 直連（WebSocket）', adb: 'ADB 廣播（後備）', none: '—' }[transport]}</b>`);
+  if (d) {
+    lines.push(
+      `直連：${d.connected ? '✅' : '❌'}${d.connected ? `　${esc(d.model || '?')} · Android SDK ${d.sdk ?? '?'} · App ${esc(d.app || '?')}` : ''}`,
+    );
+    if (d.connected) {
+      lines.push(`延遲 ${d.rttMs ?? '—'} ms　已送出 ${d.sent}　手機已套用 ${d.fixes ?? '—'}`);
+      lines.push(`模擬位置 App：${d.mockApp == null ? '—' : d.mockApp ? '✅' : '❌ 未選取'}　Providers：${esc((d.providers || []).join(', ') || '—')}`);
+      if (d.error) lines.push(`<span class="warn">手機錯誤：${esc(d.error)}</span>`);
+    }
+  }
+  if (a) {
+    lines.push(`ADB：${a.dryRun ? 'DRY RUN' : a.connected ? '✅' : '❌'}　裝置 ${esc(a.serial || '—')}　reverse ${a.reverseOk ? `✅ tcp:${a.reversePort}` : '❌'}`);
+    lines.push(`廣播已送出 ${a.sent}　丟棄 ${a.dropped}　待回應 ${a.pending}　套件 ${esc(a.pkg)}`);
+    if (a.lastError) lines.push(`<span class="warn">最近錯誤：${esc(a.lastError)}</span>`);
+  }
+  $('devStatus').innerHTML = lines.join('<br>');
 }
 
 // ------------------------------------------------------------------ movement settings
@@ -818,6 +845,10 @@ $('devSetup').onclick = async () => {
   const r = await rpc('setupPhone');
   $('devLog').textContent = (r.log || [r.error]).join('\n\n');
   toast(r.ok ? '手機設定完成' : '部分步驟失敗，請看記錄');
+};
+$('devReverse').onclick = async () => {
+  const r = await rpc('reverse');
+  toast(r.ok ? 'adb reverse 已建立，手機 App 會自動重連' : (r.skipped ? '已略過（DRY RUN 或 TRANSPORT=adb）' : `adb reverse 失敗：${r.error || ''}`));
 };
 $('devStop').onclick = async () => {
   const ok = await confirmDialog('還原真實 GPS？', '會停止路線並通知手機移除模擬定位提供者。之後瞬移或開始路線會自動重新啟用模擬。');

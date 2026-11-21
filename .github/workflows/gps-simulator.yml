@@ -1,0 +1,110 @@
+name: GPS Simulator CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['gps-sim-v*']
+    paths:
+      - 'gps-simulator/**'
+      - '.github/workflows/gps-simulator.yml'
+  pull_request:
+    paths:
+      - 'gps-simulator/**'
+      - '.github/workflows/gps-simulator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gps-sim-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bridge-tests:
+    name: Bridge tests (Node)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gps-simulator/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gps-simulator/server/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  android-apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gps-simulator/android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      # Also validates gradle-wrapper.jar against the official checksums.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode signing key (optional)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Signing with the keystore from repository secrets."
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set - APK is signed with this runner's throwaway debug key. Uninstall the old app before installing a newer build, or add the signing secrets (see gps-simulator/README.md)."
+          fi
+
+      - name: Build release APK
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Collect APK
+        id: apk
+        run: |
+          name="mock-location-bridge-${GITHUB_SHA::7}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/$name"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$GITHUB_WORKSPACE/$name" | head -3 || true
+          echo "### APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$name\` — $(du -h "$GITHUB_WORKSPACE/$name" | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          echo "sha256: \`$(sha256sum "$GITHUB_WORKSPACE/$name" | cut -d' ' -f1)\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mock-location-bridge-apk
+          path: ${{ github.workspace }}/${{ steps.apk.outputs.name }}
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/gps-sim-v')
+    needs: [bridge-tests, android-apk]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: mock-location-bridge-apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: '*.apk'
+          generate_release_notes: true

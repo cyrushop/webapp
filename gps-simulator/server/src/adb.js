@@ -11,8 +11,10 @@ import { EventEmitter } from 'node:events';
  * so there is no command-injection surface from the web UI.
  */
 export class AdbBridge extends EventEmitter {
-  constructor({ adbPath = 'adb', serial = '', pkg = 'com.pikminbridge.mock', dryRun = false } = {}) {
+  constructor({ adbPath = 'adb', serial = '', pkg = 'com.pikminbridge.mock', dryRun = false, reversePort = 0 } = {}) {
     super();
+    this.reversePort = reversePort; // 0 = don't set up `adb reverse`
+    this.reverseOk = false;
     this.adbPath = adbPath;
     this.serial = serial;
     this.pkg = pkg;
@@ -38,6 +40,8 @@ export class AdbBridge extends EventEmitter {
       pending: this.pending,
       lastError: this.lastError,
       lastSentAt: this.lastSentAt,
+      reversePort: this.reversePort,
+      reverseOk: this.reverseOk,
     };
   }
 
@@ -112,8 +116,25 @@ export class AdbBridge extends EventEmitter {
       }
     });
     sh.stdin.on('error', () => {});
+    const rev = await this.reverse();
     this.emit('status', this.status);
-    return { ok: true, serial: this.serial };
+    return { ok: true, serial: this.serial, reverse: rev.ok };
+  }
+
+  /**
+   * `adb reverse tcp:P tcp:P`: the phone's 127.0.0.1:P is tunnelled over USB to this PC's
+   * 127.0.0.1:P, so the app can open ws://127.0.0.1:P/device without Wi-Fi or a LAN IP.
+   * The mapping is lost when the cable is unplugged or adbd restarts; call again after that.
+   */
+  async reverse() {
+    if (this.dryRun || !this.reversePort) return { ok: false, skipped: true };
+    const port = Number(this.reversePort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return { ok: false, error: 'bad port' };
+    const r = await this.exec([...this.serialArgs(), 'reverse', `tcp:${port}`, `tcp:${port}`]);
+    this.reverseOk = r.ok;
+    if (!r.ok) this.lastError = `adb reverse 失敗：${r.stderr.trim().slice(0, 200)}`;
+    this.emit('status', this.status);
+    return { ok: r.ok, error: r.ok ? undefined : r.stderr.trim() };
   }
 
   disconnect() {
@@ -189,6 +210,7 @@ export class AdbBridge extends EventEmitter {
     const s = this.serialArgs();
     const log = [];
     const steps = [
+      ...(this.reversePort ? [['reverse', `tcp:${this.reversePort}`, `tcp:${this.reversePort}`]] : []),
       ['shell', 'appops', 'set', this.pkg, 'android:mock_location', 'allow'],
       ['shell', 'pm', 'grant', this.pkg, 'android.permission.ACCESS_FINE_LOCATION'],
       ['shell', 'am', 'start', '-n', `${this.pkg}/.MainActivity`, '--ez', 'autostart', 'true'],

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { Engine } from './engine.js';
 import { AdbBridge } from './adb.js';
+import { DeviceLink } from './device.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(__dirname, '../../web');
@@ -15,6 +16,10 @@ const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';
 const TICK_MS = Math.max(200, Number(process.env.TICK_MS || 1000));
 const DRY_RUN = /^(1|true|yes)$/i.test(process.env.DRY_RUN || '');
+// auto: use the phone's WebSocket link when connected, else fall back to `am broadcast`.
+const TRANSPORT = ['auto', 'ws', 'adb'].includes(process.env.TRANSPORT) ? process.env.TRANSPORT : 'auto';
+// Allow phones on the LAN (Wi-Fi, no USB) to open /device. Off by default.
+const DEVICE_ALLOW_LAN = /^(1|true|yes)$/i.test(process.env.DEVICE_ALLOW_LAN || '');
 
 const engine = new Engine({ tickMs: TICK_MS });
 const adb = new AdbBridge({
@@ -22,7 +27,9 @@ const adb = new AdbBridge({
   serial: process.env.ADB_SERIAL || '',
   pkg: process.env.MOCK_PKG || 'com.pikminbridge.mock',
   dryRun: DRY_RUN,
+  reversePort: TRANSPORT === 'adb' ? 0 : PORT,
 });
+const device = new DeviceLink();
 
 // ---------------- static file server ----------------
 const MIME = {
@@ -76,10 +83,32 @@ function originAllowed(origin, hostHeader) {
   }
 }
 
-const wss = new WebSocketServer({
-  server,
-  path: '/ws',
-  verifyClient: ({ origin, req }) => originAllowed(origin, req.headers.host),
+// Two WebSocket endpoints on one HTTP server: /ws for the browser UI, /device for the phone.
+const wss = new WebSocketServer({ noServer: true });
+const deviceWss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
+
+function isLoopback(addr = '') {
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+server.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url, 'http://localhost');
+  const reject = (code, msg) => {
+    socket.write(`HTTP/1.1 ${code} ${msg}\r\nConnection: close\r\n\r\n`);
+    socket.destroy();
+  };
+  if (pathname === '/ws') {
+    if (!originAllowed(req.headers.origin, req.headers.host)) return reject(401, 'Unauthorized');
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  } else if (pathname === '/device') {
+    // Browsers always send Origin; the Android app does not. Refusing Origin-bearing requests
+    // stops web pages from impersonating the phone.
+    if (req.headers.origin) return reject(401, 'Unauthorized');
+    if (!DEVICE_ALLOW_LAN && !isLoopback(req.socket.remoteAddress)) return reject(403, 'Forbidden');
+    deviceWss.handleUpgrade(req, socket, head, (ws) => device.attach(ws));
+  } else {
+    reject(404, 'Not Found');
+  }
 });
 
 function send(ws, type, data) {
@@ -96,13 +125,31 @@ engine.on('state', () => {
   stateQueued = true;
   setTimeout(() => {
     stateQueued = false;
-    broadcast('state', { ...engine.snapshot(), adb: adb.status });
+    broadcast('state', fullState());
   }, 100);
 });
 engine.on('route', (points) => broadcast('route', points));
-engine.on('location', (fix) => adb.sendLocation(fix));
-engine.on('stopMocking', () => adb.sendStop());
+function activeTransport() {
+  if (TRANSPORT !== 'adb' && device.connected) return 'ws';
+  if (TRANSPORT !== 'ws' && adb.status.connected) return 'adb';
+  return 'none';
+}
+function fullState() {
+  return { ...engine.snapshot(), adb: adb.status, device: device.status, transport: activeTransport(), transportMode: TRANSPORT };
+}
+engine.on('location', (fix) => {
+  const t = activeTransport();
+  if (t === 'ws') device.sendFix(fix);
+  else if (t === 'adb') adb.sendLocation(fix);
+});
+engine.on('stopMocking', () => {
+  device.sendStop();
+  adb.sendStop();
+});
 adb.on('status', (st) => broadcast('adb', st));
+device.on('status', (st) => {
+  broadcast('device', { ...st, transport: activeTransport() });
+});
 
 const handlers = {
   teleport: (d) => engine.teleport({ lat: Number(d.lat), lng: Number(d.lng) }, { force: !!d.force }),
@@ -121,11 +168,12 @@ const handlers = {
   selectDevice: (d) => adb.selectDevice(String(d.serial || '')),
   connect: () => adb.connect(),
   setupPhone: () => adb.setupPhone(),
+  reverse: () => adb.reverse(),
 };
 
 wss.on('connection', (ws) => {
   send(ws, 'hello', { version: 1, dryRun: DRY_RUN, tickMs: TICK_MS });
-  send(ws, 'state', { ...engine.snapshot(), adb: adb.status });
+  send(ws, 'state', fullState());
   send(ws, 'route', engine.routePoints);
 
   ws.on('message', async (raw) => {
@@ -149,17 +197,25 @@ wss.on('connection', (ws) => {
 
 server.listen(PORT, HOST, async () => {
   const shown = HOST === '0.0.0.0' ? 'localhost' : HOST;
-  console.log(`GPS simulator bridge on http://${shown}:${PORT}  (tick ${TICK_MS} ms${DRY_RUN ? ', DRY RUN' : ''})`);
+  console.log(
+    `GPS simulator bridge on http://${shown}:${PORT}  (tick ${TICK_MS} ms, transport ${TRANSPORT}${DRY_RUN ? ', DRY RUN' : ''})`,
+  );
   if (HOST !== '127.0.0.1' && HOST !== 'localhost') {
     console.warn('WARNING: listening beyond localhost — anyone on this network can control the phone location.');
   }
   engine.start();
+  // Re-attach automatically after the cable is re-plugged (this also restores `adb reverse`).
+  setInterval(() => {
+    if (!DRY_RUN && !adb.shell && TRANSPORT !== 'ws') adb.connect().catch(() => {});
+    else if (!DRY_RUN && adb.shell && !device.connected && TRANSPORT !== 'adb' && !adb.reverseOk) adb.reverse();
+  }, 5000);
   const r = await adb.connect();
-  console.log(r.ok ? `adb: connected ${adb.serial || ''}` : `adb: ${r.error} (UI 可重試)`);
+  console.log(r.ok ? `adb: connected ${adb.serial || ''}${r.reverse ? ` (reverse tcp:${PORT} ok)` : ''}` : `adb: ${r.error} (UI 可重試)`);
 });
 
 function shutdown() {
   engine.stop();
+  device.close();
   adb.disconnect();
   process.exit(0);
 }
