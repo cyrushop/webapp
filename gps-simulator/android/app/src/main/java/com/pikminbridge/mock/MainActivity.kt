@@ -39,6 +39,18 @@ class MainActivity : Activity() {
         status = TextView(this).apply { textSize = 15f; gravity = Gravity.START }
         root.addView(TextView(this).apply { text = "Mock Location Bridge"; textSize = 22f })
         root.addView(status)
+        BridgeApp.lastCrash(this)?.let { crash ->
+            val crashView = TextView(this).apply {
+                text = "⚠️ 上次閃退記錄（截圖給開發者）：\n$crash"
+                textSize = 11f
+                setTextIsSelectable(true)
+            }
+            root.addView(crashView)
+            root.addView(button("清除閃退記錄") {
+                BridgeApp.clearCrash(this)
+                root.removeView(crashView)
+            })
+        }
         root.addView(button("1. 授予定位 / 通知權限") { requestPerms() })
         root.addView(button("2. 開啟開發者選項（選取模擬位置應用程式）") {
             startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS))

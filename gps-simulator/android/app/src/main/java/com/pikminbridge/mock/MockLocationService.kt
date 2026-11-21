@@ -57,8 +57,20 @@ class MockLocationService : Service(), BridgeClient.Listener {
             context.startForegroundService(i)
         }
 
+        fun canStartForeground(context: Context): Boolean =
+            context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                context.checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
         @Suppress("DEPRECATION")
-        fun isMockApp(context: Context): Boolean {
+        fun isMockApp(context: Context): Boolean = try {
+            isMockAppUnsafe(context)
+        } catch (e: Exception) {
+            Log.w(TAG, "mock-location app-op check failed", e)
+            false
+        }
+
+        @Suppress("DEPRECATION")
+        private fun isMockAppUnsafe(context: Context): Boolean {
             val ops = context.getSystemService(AppOpsManager::class.java)
             val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_MOCK_LOCATION, Process.myUid(), context.packageName)
@@ -111,10 +123,19 @@ class MockLocationService : Service(), BridgeClient.Listener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notif = buildNotification("等待電腦連線…")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } else {
-            startForeground(NOTIF_ID, notif)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+            } else {
+                startForeground(NOTIF_ID, notif)
+            }
+        } catch (e: Exception) {
+            // Missing location permission (Android 14+) or a background-start restriction.
+            // Bail out cleanly instead of crashing the whole app.
+            Log.e(TAG, "startForeground refused", e)
+            lastStatus = "無法啟動服務：${e.javaClass.simpleName}（請先授予定位權限並由 App 內啟動）"
+            stopSelf()
+            return START_NOT_STICKY
         }
         if (providers.isEmpty()) setupProviders()
         intent?.let { CommandReceiver.parseFix(it) }?.let { update(it) }

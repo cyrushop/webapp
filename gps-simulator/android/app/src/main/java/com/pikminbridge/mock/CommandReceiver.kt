@@ -48,6 +48,10 @@ class CommandReceiver : BroadcastReceiver() {
                 val svc = MockLocationService.instance
                 if (svc != null) {
                     svc.update(fix)
+                } else if (!MockLocationService.canStartForeground(context)) {
+                    // A location-type foreground service needs the location permission (Android 14+);
+                    // starting it without one throws and kills the app. Wait for the user to grant it.
+                    Log.w(TAG, "location permission not granted yet; ignoring fix")
                 } else {
                     // Starting a foreground service from the background is restricted on
                     // Android 12+; if refused, open the app once (the PC bridge's
