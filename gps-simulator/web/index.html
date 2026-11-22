@@ -13,7 +13,8 @@
     <div class="status">
       <span id="wsDot" class="dot off" title="網頁 ↔ 本地橋接"></span><span id="wsText">未連線</span>
       <span class="sep">|</span>
-      <span id="adbDot" class="dot off" title="橋接 ↔ 手機"></span><span id="adbText">手機未連線</span>
+      <span id="adbDot" class="dot off" title="橋接 ↔ Android"></span><span id="adbText">Android 未連線</span>
+      <span id="iosWrap" class="hidden"><span class="sep">|</span> <span id="iosDot" class="dot off" title="橋接 ↔ iPhone"></span> <span id="iosText">iPhone</span></span>
       <span class="sep">|</span>
       <span id="posText" class="mono">—</span>
       <span class="sep">|</span>
@@ -207,6 +208,11 @@
             <button id="devStop" class="danger">🛑 還原真實 GPS</button>
           </div>
           <pre id="devLog" class="log hidden"></pre>
+        </div>
+        <div class="card">
+          <div class="row between"><strong>📱 iPhone（iOS 17.4+）</strong><button id="iosToggle">📱 啟用 iPhone</button></div>
+          <div id="iosStatus" class="small mono"></div>
+          <p class="hint">需要：Mac 已安裝 pymobiledevice3（用 start-mac-ios.command 會自動安裝）、iPhone 開啟「開發者模式」、解鎖並「信任此電腦」。拔線或關閉後 iPhone 會即時變回真實位置。</p>
         </div>
         <details>
           <summary>種花預設速度 / 進階</summary>

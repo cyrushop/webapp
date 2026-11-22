@@ -9,3 +9,5 @@ local.properties
 *.keystore
 *.jks.b64
 keystore.properties
+.venv/
+__pycache__/

@@ -6,6 +6,7 @@ import { WebSocketServer } from 'ws';
 import { Engine } from './engine.js';
 import { AdbBridge } from './adb.js';
 import { DeviceLink } from './device.js';
+import { IosBridge } from './ios.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(__dirname, '../../web');
@@ -30,6 +31,12 @@ const adb = new AdbBridge({
   reversePort: TRANSPORT === 'adb' ? 0 : PORT,
 });
 const device = new DeviceLink();
+// iPhone (iOS 17.4+) via ios/ios_bridge.py. IOS=1 starts it at launch; the UI can toggle it too.
+const VENV_PY = path.resolve(__dirname, '../../ios/.venv/bin/python');
+const ios = new IosBridge({
+  python: process.env.IOS_PYTHON || (fs.existsSync(VENV_PY) ? VENV_PY : 'python3'),
+  udid: process.env.IOS_UDID || '',
+});
 
 // ---------------- static file server ----------------
 const MIME = {
@@ -132,23 +139,39 @@ engine.on('state', () => {
   }, 100);
 });
 engine.on('route', (points) => broadcast('route', points));
+/** Every target that gets fixes right now: Android direct link (else adb fallback) and/or iPhone. */
+function activeTransports() {
+  const t = [];
+  if (TRANSPORT !== 'adb' && device.connected) t.push('ws');
+  else if (TRANSPORT !== 'ws' && adb.status.connected) t.push('adb');
+  if (ios.ready) t.push('ios');
+  return t;
+}
 function activeTransport() {
-  if (TRANSPORT !== 'adb' && device.connected) return 'ws';
-  if (TRANSPORT !== 'ws' && adb.status.connected) return 'adb';
-  return 'none';
+  return activeTransports().join('+') || 'none';
 }
 function fullState() {
-  return { ...engine.snapshot(), adb: adb.status, device: device.status, transport: activeTransport(), transportMode: TRANSPORT };
+  return {
+    ...engine.snapshot(),
+    adb: adb.status,
+    device: device.status,
+    ios: ios.status,
+    transport: activeTransport(),
+    transportMode: TRANSPORT,
+  };
 }
 engine.on('location', (fix) => {
-  const t = activeTransport();
-  if (t === 'ws') device.sendFix(fix);
-  else if (t === 'adb') adb.sendLocation(fix);
+  const t = activeTransports();
+  if (t.includes('ws')) device.sendFix(fix);
+  else if (t.includes('adb')) adb.sendLocation(fix);
+  if (t.includes('ios')) ios.sendFix(fix);
 });
 engine.on('stopMocking', () => {
   device.sendStop();
   adb.sendStop();
+  ios.sendStop();
 });
+ios.on('status', (st) => broadcast('ios', { ...st, transport: activeTransport() }));
 adb.on('status', (st) => broadcast('adb', st));
 device.on('status', (st) => {
   broadcast('device', { ...st, transport: activeTransport() });
@@ -173,6 +196,8 @@ const handlers = {
   connect: () => adb.connect(),
   setupPhone: () => adb.setupPhone(),
   reverse: () => adb.reverse(),
+  iosStart: () => (ios.start(), { ok: true }),
+  iosStop: () => (ios.stop(), { ok: true }),
 };
 
 wss.on('connection', (ws) => {
@@ -208,6 +233,7 @@ server.listen(PORT, HOST, async () => {
     console.warn('WARNING: listening beyond localhost — anyone on this network can control the phone location.');
   }
   engine.start();
+  if (/^(1|true|yes)$/i.test(process.env.IOS || '')) ios.start();
   // Re-attach automatically after the cable is re-plugged (this also restores `adb reverse`).
   setInterval(() => {
     if (!DRY_RUN && !adb.shell && TRANSPORT !== 'ws') adb.connect().catch(() => {});
@@ -219,6 +245,7 @@ server.listen(PORT, HOST, async () => {
 
 function shutdown() {
   engine.stop();
+  ios.stop();
   device.close();
   adb.disconnect();
   process.exit(0);

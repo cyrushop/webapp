@@ -57,6 +57,18 @@
 
 若 macOS 話「無法打開，來自未識別的開發者」：開「終端機」，輸入 `bash ` （後面有空格），把 `start-mac.command` 拖入視窗，按 Enter；或到 系統設定 → 私隱與安全性 → 仍要打開。
 
+## iPhone（iOS 17.4+，已按 iPhone 11 Pro / iOS 26.5 設計）
+
+iPhone 唔使裝任何 App：Mac 經 USB 用 Apple 開發者服務（DVT LocationSimulation）設定位置，透過 [pymobiledevice3](https://github.com/doronz88/pymobiledevice3) 的**免 root 用戶空間通道**（唔使 sudo）。
+
+1. Mac 安裝 Python 3.13（`brew install python@3.13` 或 python.org）。
+2. iPhone 用 USB 線接 Mac → 解鎖 → 按「信任此電腦」。
+3. 雙擊（或 `bash` 執行）`gps-simulator/start-mac-ios.command`：第一次會建立 `ios/.venv` 並安裝 pymobiledevice3，嘗試令 iPhone 顯示「開發者模式」選項，然後啟動橋接（`IOS=1`）。
+4. iPhone：設定 → 私隱與安全性 → **開發者模式** → 開啟 → 重新開機 → 開機後確認「開啟」。
+5. 網頁頂欄出現 🟢 **iPhone 26.5** 即可。第一次會自動下載並掛載開發者映像（Personalized DDI）。
+
+限制：拔線、iPhone 上鎖太耐或關閉橋接 → iPhone **即時變回真實位置**；只可設定經緯度（速度／方向由 iOS 自行推算）。Android 與 iPhone 可同時連接，兩部會同步移動。
+
 ## 安裝與執行
 
 ### 1. 電腦端（需要 Node.js ≥ 18 與 Android platform-tools）
