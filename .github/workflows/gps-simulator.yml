@@ -107,7 +107,7 @@ jobs:
           node-version: 22
       - name: Build Pikmin GPS.app
         run: |
-          V=0.3.0
+          V="$(tr -d '[:space:]' < gps-simulator/VERSION)"
           case "$GITHUB_REF" in refs/tags/gps-sim-v*) V="${GITHUB_REF_NAME#gps-sim-v}";; esac
           APP_VERSION="$V" bash gps-simulator/macos/build-app.sh "$RUNNER_TEMP/dist"
       - name: Smoke test (launch the app, load the page, stop it)
@@ -132,12 +132,22 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/gps-sim-v')
+    # A gps-sim-v* tag, or a push whose head commit message contains [release]
+    # (the workflow then creates the tag from gps-simulator/VERSION itself).
+    if: startsWith(github.ref, 'refs/tags/gps-sim-v') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release]'))
     needs: [bridge-tests, android-apk, mac-app]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
+      - name: Release tag
+        id: tag
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/*) echo "name=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT" ;;
+            *) echo "name=gps-sim-v$(tr -d '[:space:]' < gps-simulator/VERSION)" >> "$GITHUB_OUTPUT" ;;
+          esac
       - uses: actions/download-artifact@v5
         with:
           path: assets
@@ -149,6 +159,9 @@ jobs:
           ls -la
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          target_commitish: ${{ github.sha }}
+          name: Pikmin GPS ${{ steps.tag.outputs.name }}
           files: |
             assets/PikminGPS-mac.zip
             assets/MockLocationBridge.apk

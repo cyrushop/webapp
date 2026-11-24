@@ -113,7 +113,7 @@ npm test             # 單元 + 整合測試（含 /device 直連）
 **取得 APK（三選一）**
 
 - **GitHub Actions（推薦）**：每次 push 到 `gps-simulator/**` 都會自動 build。到 repo → Actions → *GPS Simulator CI* → 最新一次 run → Artifacts 下載 `mock-location-bridge-apk`（zip 內是 APK），然後 `adb install -r mock-location-bridge-xxxxxxx.apk`。
-- **Release**：push 一個 `gps-sim-v*` tag（例如 `git tag gps-sim-v0.2.0 && git push origin gps-sim-v0.2.0`），CI 會把 APK 附加到 GitHub Release。
+- **Release**：改 `gps-simulator/VERSION`，commit 訊息加上 `[release]` 再 push（或 push 一個 `gps-sim-v*` tag），CI 會建立 Release 並附上 `PikminGPS-mac.zip` 同 `MockLocationBridge.apk`。
 - **本機**：`cd gps-simulator/android && ./gradlew assembleRelease`，或用 Android Studio 開啟該資料夾。
 
 **固定簽名（建議）**：未設定 secrets 時，CI 用每次 runner 臨時產生的 debug key 簽名，新舊 APK 簽名不同，更新前要先解除安裝舊版。一次性設定：
