@@ -45,7 +45,19 @@
 | 冷卻計算器 | 記錄互動點 → 實時倒數；瞬移前檢查並要求確認；冷卻表可編輯 |
 | 還原真實 GPS | 移除 test providers 並停止服務 |
 
-## Mac 快速開始
+## Mac App（最簡單）
+
+下載：**https://github.com/cyrushop/webapp/releases/latest/download/PikminGPS-mac.zip**（需登入 GitHub）
+
+1. 解壓 → 將 **Pikmin GPS.app** 拖入「應用程式」。
+2. 第一次打開：macOS 會話「無法驗證」→ 撳「完成」→ 系統設定 → 私隱與安全性 → 撳「仍要打開」→ 輸入密碼。之後雙擊就得。
+3. App 會喺背景啟動電腦端程式並自動打開 http://127.0.0.1:8787/ 。內置 Node.js，唔使另外安裝。
+4. Android 用 Android Studio 自帶嘅 adb（自動搵 `~/Library/Android/sdk/platform-tools/adb`）。iPhone：網頁「裝置」→「⬇️ 安裝 / 更新 iPhone 支援」（需要 Python 3.10+）。
+5. 結束：網頁「裝置」→「⏻ 結束電腦端程式」。記錄檔：`~/Library/Logs/PikminGPS/bridge.log`。
+
+Android App：**https://github.com/cyrushop/webapp/releases/latest/download/MockLocationBridge.apk**
+
+## Mac 快速開始（用原始碼）
 
 電腦端唔係獨立 App：係一個本地橋接程式（Node.js）＋ 瀏覽器網頁。Mac 需要：
 

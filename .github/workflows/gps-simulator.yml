@@ -97,18 +97,60 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  mac-app:
+    name: Build macOS app
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Build Pikmin GPS.app
+        run: |
+          V=0.3.0
+          case "$GITHUB_REF" in refs/tags/gps-sim-v*) V="${GITHUB_REF_NAME#gps-sim-v}";; esac
+          APP_VERSION="$V" bash gps-simulator/macos/build-app.sh "$RUNNER_TEMP/dist"
+      - name: Smoke test (launch the app, load the page, stop it)
+        run: |
+          set -e
+          APP="$RUNNER_TEMP/dist/Pikmin GPS.app"
+          # Unzip the artifact exactly as a user would, then launch it via LaunchServices.
+          mkdir -p "$RUNNER_TEMP/unzip" && ditto -x -k "$RUNNER_TEMP/dist/PikminGPS-mac.zip" "$RUNNER_TEMP/unzip"
+          open "$RUNNER_TEMP/unzip/Pikmin GPS.app"
+          for i in $(seq 1 40); do curl -s -o /dev/null -m 1 http://127.0.0.1:8787/ && break; sleep 0.5; done
+          curl -fsS http://127.0.0.1:8787/ | grep -q "GPS 定位控制器"
+          curl -fsS -o /dev/null http://127.0.0.1:8787/vendor/leaflet/leaflet.js
+          curl -fsS -o /dev/null http://127.0.0.1:8787/lib/planting.js
+          echo "bridge log:"; cat ~/Library/Logs/PikminGPS/bridge.log || true
+          pkill -f "src/server.js" || true
+      - uses: actions/upload-artifact@v5
+        with:
+          name: pikmin-gps-mac
+          path: ${{ runner.temp }}/dist/PikminGPS-mac.zip
+          if-no-files-found: error
+          retention-days: 30
+
   release:
     name: Publish GitHub Release
     if: startsWith(github.ref, 'refs/tags/gps-sim-v')
-    needs: [bridge-tests, android-apk]
+    needs: [bridge-tests, android-apk, mac-app]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v5
         with:
-          name: mock-location-bridge-apk
+          path: assets
+          merge-multiple: true
+      - name: Stable asset names
+        run: |
+          cd assets
+          mv mock-location-bridge-*.apk MockLocationBridge.apk
+          ls -la
       - uses: softprops/action-gh-release@v2
         with:
-          files: '*.apk'
+          files: |
+            assets/PikminGPS-mac.zip
+            assets/MockLocationBridge.apk
           generate_release_notes: true
+          make_latest: true

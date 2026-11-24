@@ -7,6 +7,7 @@ import { Engine } from './engine.js';
 import { AdbBridge } from './adb.js';
 import { DeviceLink } from './device.js';
 import { IosBridge } from './ios.js';
+import { findAdb, resolveIosPython, setupIos } from './setup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = path.resolve(__dirname, '../../web');
@@ -24,7 +25,7 @@ const DEVICE_ALLOW_LAN = /^(1|true|yes)$/i.test(process.env.DEVICE_ALLOW_LAN || 
 
 const engine = new Engine({ tickMs: TICK_MS });
 const adb = new AdbBridge({
-  adbPath: process.env.ADB_PATH || 'adb',
+  adbPath: findAdb(),
   serial: process.env.ADB_SERIAL || '',
   pkg: process.env.MOCK_PKG || 'com.pikminbridge.mock',
   dryRun: DRY_RUN,
@@ -34,7 +35,7 @@ const device = new DeviceLink();
 // iPhone (iOS 17.4+) via ios/ios_bridge.py. IOS=1 starts it at launch; the UI can toggle it too.
 const VENV_PY = path.resolve(__dirname, '../../ios/.venv/bin/python');
 const ios = new IosBridge({
-  python: process.env.IOS_PYTHON || (fs.existsSync(VENV_PY) ? VENV_PY : 'python3'),
+  python: resolveIosPython(VENV_PY),
   udid: process.env.IOS_UDID || '',
 });
 
@@ -197,6 +198,21 @@ const handlers = {
   setupPhone: () => adb.setupPhone(),
   reverse: () => adb.reverse(),
   iosStart: () => (ios.start(), { ok: true }),
+  iosSetup: async () => {
+    const r = await setupIos((line) => broadcast('iosSetupLog', line));
+    if (r.ok) {
+      ios.python = r.python;
+      if (ios.enabled) {
+        ios.stop();
+        ios.start();
+      }
+    }
+    return r;
+  },
+  shutdown: () => {
+    setTimeout(shutdown, 300);
+    return { ok: true };
+  },
   iosStop: () => (ios.stop(), { ok: true }),
 };
 

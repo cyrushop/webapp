@@ -111,6 +111,11 @@ function connect() {
     else if (type === 'adb') onAdb(data);
     else if (type === 'device') onDevice(data);
     else if (type === 'ios') onIos(data);
+    else if (type === 'iosSetupLog') {
+      $('iosLog').classList.remove('hidden');
+      $('iosLog').textContent += `${data}\n`;
+      $('iosLog').scrollTop = $('iosLog').scrollHeight;
+    }
     else if (type === 'reply') {
       const fn = pending.get(data.id);
       if (fn) {
@@ -121,7 +126,7 @@ function connect() {
   };
 }
 
-function rpc(type, data = {}) {
+function rpc(type, data = {}, timeoutMs = 15000) {
   return new Promise((resolve) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return resolve({ ok: false, error: '未連線到本地橋接' });
     const id = ++reqId;
@@ -132,7 +137,7 @@ function rpc(type, data = {}) {
         pending.delete(id);
         resolve({ ok: false, error: 'timeout' });
       }
-    }, 15000);
+    }, timeoutMs);
   });
 }
 function fire(type, data = {}) {
@@ -962,6 +967,19 @@ $('iosToggle').onclick = async () => {
   const on = lastIos?.enabled;
   const r = await rpc(on ? 'iosStop' : 'iosStart');
   if (!r.ok) toast(r.error || '失敗');
+};
+$('iosSetup').onclick = async () => {
+  $('iosSetup').disabled = true;
+  $('iosLog').classList.remove('hidden');
+  $('iosLog').textContent = '';
+  const r = await rpc('iosSetup', {}, 10 * 60 * 1000);
+  $('iosSetup').disabled = false;
+  toast(r.ok ? 'iPhone 支援已安裝，可按「啟用 iPhone」' : `安裝失敗：${r.error || ''}`);
+};
+$('bridgeQuit').onclick = async () => {
+  if (!(await confirmDialog('結束電腦端程式？', '手機會停止接收座標（iPhone 會變回真實位置）。下次雙擊 App 即可重新開啟。'))) return;
+  await rpc('shutdown');
+  document.body.innerHTML = '<p style="padding:24px;font-size:16px">電腦端程式已結束，可以關閉此分頁。</p>';
 };
 $('devStop').onclick = async () => {
   const ok = await confirmDialog('還原真實 GPS？', '會停止路線並通知手機移除模擬定位提供者。之後瞬移或開始路線會自動重新啟用模擬。');
